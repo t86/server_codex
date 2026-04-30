@@ -261,6 +261,10 @@ function isInvalidAccountError(message: string) {
     lower.includes("not logged in") ||
     lower.includes("auth.json") ||
     lower.includes("invalid token") ||
+    lower.includes("token_expired") ||
+    lower.includes("refresh_token_reused") ||
+    lower.includes("refresh token was already used") ||
+    lower.includes("access token could not be refreshed") ||
     lower.includes("unauthorized") ||
     lower.includes("401") ||
     lower.includes("account has been deactivated") ||
