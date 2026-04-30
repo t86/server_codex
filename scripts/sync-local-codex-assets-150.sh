@@ -31,10 +31,12 @@ REMOTE_DATA_DIR="$REMOTE_DATA_DIR"
 REMOTE_GLOBAL_DIR="$REMOTE_GLOBAL_DIR"
 
 find "\$REMOTE_DATA_DIR/codex-home/accounts" -mindepth 1 -maxdepth 1 -type d | while read -r account_home; do
-  rm -rf "\$account_home/skills" "\$account_home/plugins"
-  ln -s "\$REMOTE_GLOBAL_DIR/skills" "\$account_home/skills"
-  ln -s "\$REMOTE_GLOBAL_DIR/plugins" "\$account_home/plugins"
+  sudo rm -rf "\$account_home/skills" "\$account_home/plugins"
+  sudo ln -s "\$REMOTE_GLOBAL_DIR/skills" "\$account_home/skills"
+  sudo ln -s "\$REMOTE_GLOBAL_DIR/plugins" "\$account_home/plugins"
 done
+
+sudo chown -R ubuntu:ubuntu "\$REMOTE_GLOBAL_DIR"
 
 find "\$REMOTE_GLOBAL_DIR/skills" -maxdepth 2 -name SKILL.md | sort
 find "\$REMOTE_GLOBAL_DIR/plugins" -maxdepth 6 -path '*/.codex-plugin/plugin.json' | sort
