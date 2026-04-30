@@ -13,6 +13,8 @@ It will provide:
 
 See [docs/design.md](docs/design.md) for the current architecture and implementation plan.
 
+中文规格说明见 [docs/spec.zh.md](docs/spec.zh.md)。
+
 ## Planned MVP
 
 1. Build the web console foundation.
