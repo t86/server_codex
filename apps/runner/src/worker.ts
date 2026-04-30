@@ -64,6 +64,7 @@ async function runCodexExec(context: {
   const outputFile = path.join(os.tmpdir(), `server-codex-${id()}.txt`);
   const accountHome = path.join(codexDataDir, "codex-home", "accounts", context.accountId);
   const sshConfig = path.join(codexDataDir, "secrets", "ssh", "config");
+  await ensureAccountHome(accountHome);
 
   const args = [
     "exec",
@@ -176,6 +177,18 @@ async function completeRun(run: { id: string; thread_id: string }) {
         continue;
       }
 
+      if (isInvalidAccountError(message)) {
+        progressContent += `\n账号不可用，已跳过：${account.label}\n`;
+        await flushProgress(true);
+        await db.query(
+          `update codex_accounts
+           set status = 'invalid', updated_at = now()
+           where id = $1`,
+          [account.id]
+        );
+        continue;
+      }
+
       throw error;
     }
   }
@@ -219,6 +232,15 @@ async function completeRun(run: { id: string; thread_id: string }) {
   }
 }
 
+async function ensureAccountHome(accountHome: string) {
+  try {
+    await fs.access(accountHome);
+    await fs.access(path.join(accountHome, "auth.json"));
+  } catch {
+    throw new Error(`account home is missing or incomplete: ${accountHome}`);
+  }
+}
+
 function isCapacityError(message: string) {
   const lower = message.toLowerCase();
   return (
@@ -227,6 +249,25 @@ function isCapacityError(message: string) {
     lower.includes("quota") ||
     lower.includes("more credits") ||
     lower.includes("try again at")
+  );
+}
+
+function isInvalidAccountError(message: string) {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("account home is missing") ||
+    lower.includes("codex_home points") ||
+    lower.includes("path does not exist") ||
+    lower.includes("not logged in") ||
+    lower.includes("auth.json") ||
+    lower.includes("invalid token") ||
+    lower.includes("unauthorized") ||
+    lower.includes("401") ||
+    lower.includes("account has been deactivated") ||
+    lower.includes("workspace has been deactivated") ||
+    lower.includes("账号已被踢出") ||
+    lower.includes("账号被封禁") ||
+    lower.includes("授权过期")
   );
 }
 
