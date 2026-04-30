@@ -68,7 +68,15 @@ flowchart LR
 - 部署：Docker Compose。
 - 反向代理：Caddy 或 Nginx。
 
-MVP 阶段优先使用 Codex CLI 模式，因为它更容易复用本地 Codex 的 skill、plugin、shell 和文件操作能力。后续再逐步增加直接 API 模式。
+MVP 阶段确定只使用 Codex CLI 模式，因为它更容易复用本地 Codex 的 skill、plugin、shell 和文件操作能力。后续再逐步增加直接 API 模式。
+
+第一版约束：
+
+- 单用户。
+- Runner 只调用 Codex CLI。
+- 账号池先支持手动导入和手动切换。
+- SSH 操作 `111`/`114` 使用 `150` 上新生成的专用 key。
+- MVP 阶段可执行命令默认不要求人工确认，但必须完整记录审计日志。
 
 ## 5. 150 服务器目录规划
 
@@ -283,6 +291,44 @@ codex_accounts
    - 适合 CLI Runner。
    - 每个账号使用独立 `CODEX_HOME`。
    - 只导入 Codex 登录所需文件。
+
+MVP 使用 Codex Home 模式，优先复用现有 `codex-account` 工具的数据格式。
+
+本机已确认的相关位置：
+
+```text
+~/.codex/auth.json
+~/.codex/config.toml
+~/.codex/.codex-global-state.json
+~/.codex/state_5.sqlite
+~/.codex/plugins/
+~/.codex/skills/
+~/Library/Application Support/com.carry.codex-tools/accounts.json
+```
+
+其中：
+
+- `~/.codex/auth.json` 是当前 Codex 登录态。
+- `~/Library/Application Support/com.carry.codex-tools/accounts.json` 是 `codex-account` 工具维护的账号池。
+- `accounts.json` 当前格式包含 `id`、`label`、`principalId`、`email`、`accountId`、`planType`、`authJson`、`usage`、`usageError` 等字段。
+- 第一版可以直接导入 `codex-account` 的 `accounts.json`，再为每个账号生成独立 `CODEX_HOME`。
+
+导入流程：
+
+1. 用户在网站上传或服务器读取 `accounts.json`。
+2. 后端解析账号列表。
+3. 每个账号写入 `/srv/codex/secrets/accounts/{accountId}/auth.json`。
+4. 为每个账号创建 `/srv/codex/codex-home/accounts/{accountId}`。
+5. 将对应 `auth.json` 写入该账号的 `CODEX_HOME/auth.json`。
+6. 数据库只保存账号摘要和 `secret_ref`，不保存完整 token。
+
+Runner 切换账号时，不修改全局登录态，而是为当前进程设置：
+
+```bash
+CODEX_HOME=/srv/codex/codex-home/accounts/{accountId}
+```
+
+这样每个账号的 CLI 登录态彼此隔离。
 
 账号选择规则：
 
@@ -532,9 +578,18 @@ caddy
 
 ## 17. 待确认问题
 
-- 第一版 Runner 是否只使用 Codex CLI？
-- 本机 Codex 登录状态具体存放在哪些文件？
-- `150` 操作 `111`/`114` 使用新生成专用 key，还是复制现有 key？
-- 哪些命令需要人工确认？
-- MVP 是否只做单用户？
-- 账号池第一版是否先只做手动导入和手动切换？
+已确认：
+
+- 第一版 Runner 只使用 Codex CLI。
+- MVP 先做单用户。
+- `150` 操作 `111`/`114` 使用新生成的专用 SSH key。
+- 可用命令 MVP 阶段默认不需要人工确认，但必须记录审计日志。
+- 账号池第一版先做手动导入和手动切换。
+- 本机 Codex 当前登录态位于 `~/.codex/auth.json`。
+- 本机 `codex-account` 账号池位于 `~/Library/Application Support/com.carry.codex-tools/accounts.json`。
+
+后续仍需实现时确认：
+
+- 150 上是否直接编译/复用 `codex-tools-proxyd`，还是只复用其账号 JSON 格式。
+- 第一版是否需要迁移本机 `~/.codex/skills` 和 `~/.codex/plugins` 到 150 的全局目录。
+- 哪些命令后续需要升级为高风险命令并加入人工确认。
