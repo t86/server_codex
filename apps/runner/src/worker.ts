@@ -72,7 +72,7 @@ async function runCodexExec(context: {
     "--skip-git-repo-check",
     "--sandbox",
     "danger-full-access",
-    "--ask-for-approval",
+    "-a",
     "never",
     "--output-last-message",
     outputFile,
