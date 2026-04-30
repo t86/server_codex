@@ -23,6 +23,18 @@ git fetch origin "$BRANCH"
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
 
+if [ ! -f .env ]; then
+  PASSWORD="\$(openssl rand -base64 24 | tr -d '\n')"
+  {
+    echo "WEB_BASIC_AUTH_USER=admin"
+    echo "WEB_BASIC_AUTH_PASSWORD=\$PASSWORD"
+  } > .env
+  chmod 600 .env
+  echo "Generated Web Basic Auth credentials:"
+  echo "  user: admin"
+  echo "  password: \$PASSWORD"
+fi
+
 docker compose up -d --build
 docker compose ps
 EOF

@@ -8,8 +8,6 @@ services:
       REDIS_URL: redis://redis:6379
       CODEX_DATA_DIR: /srv/codex
       API_PORT: 4000
-    ports:
-      - "4000:4000"
     volumes:
       - codex-data:/srv/codex
     depends_on:
@@ -38,6 +36,8 @@ services:
     command: npm run start -w @server-codex/web
     environment:
       API_INTERNAL_URL: http://api:4000
+      WEB_BASIC_AUTH_USER: ${WEB_BASIC_AUTH_USER:-admin}
+      WEB_BASIC_AUTH_PASSWORD: ${WEB_BASIC_AUTH_PASSWORD:?WEB_BASIC_AUTH_PASSWORD is required}
     ports:
       - "3000:3000"
     depends_on:
@@ -50,8 +50,6 @@ services:
       POSTGRES_DB: server_codex
       POSTGRES_USER: server_codex
       POSTGRES_PASSWORD: server_codex
-    ports:
-      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -62,8 +60,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
