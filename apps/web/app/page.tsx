@@ -202,7 +202,7 @@ export default function Home() {
             </div>
           ) : null}
 
-          {messages.map((message) => (
+          {messages.filter((message) => message.role !== "tool").map((message) => (
             <article className={`message ${message.role}`} key={message.id}>
               <div className="messageRole">{message.role}</div>
               <p>{message.content}</p>

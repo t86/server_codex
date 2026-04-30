@@ -165,7 +165,8 @@ async function completeRun(run: { id: string; thread_id: string }) {
       const message = error instanceof Error ? error.message : String(error);
       failures.push(`${account.label}: ${message.slice(0, 220)}`);
 
-      if (isCapacityError(message)) {
+      const accountError = classifyAccountError(message);
+      if (accountError === "exhausted") {
         progressContent += `\n账号额度不足，切换下一个账号：${account.label}\n`;
         await flushProgress(true);
         await db.query(
@@ -177,7 +178,7 @@ async function completeRun(run: { id: string; thread_id: string }) {
         continue;
       }
 
-      if (isInvalidAccountError(message)) {
+      if (accountError === "invalid") {
         progressContent += `\n账号不可用，已跳过：${account.label}\n`;
         await flushProgress(true);
         await db.query(
@@ -273,6 +274,12 @@ function isInvalidAccountError(message: string) {
     lower.includes("账号被封禁") ||
     lower.includes("授权过期")
   );
+}
+
+function classifyAccountError(message: string): "exhausted" | "invalid" | null {
+  if (isCapacityError(message)) return "exhausted";
+  if (isInvalidAccountError(message)) return "invalid";
+  return null;
 }
 
 async function failRun(run: { id: string; thread_id: string }, error: unknown) {
