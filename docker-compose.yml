@@ -24,6 +24,7 @@ services:
       DATABASE_URL: postgres://server_codex:server_codex@postgres:5432/server_codex
       REDIS_URL: redis://redis:6379
       CODEX_DATA_DIR: /srv/codex
+      CODEX_BIN: /app/node_modules/.bin/codex
     volumes:
       - codex-data:/srv/codex
     depends_on:

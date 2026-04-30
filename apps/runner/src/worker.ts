@@ -10,7 +10,7 @@ const databaseUrl =
   process.env.DATABASE_URL ??
   "postgres://server_codex:server_codex@localhost:5432/server_codex";
 const codexDataDir = process.env.CODEX_DATA_DIR ?? path.resolve(process.cwd(), "data/codex");
-const codexBin = process.env.CODEX_BIN ?? "codex";
+const codexBin = process.env.CODEX_BIN ?? "/app/node_modules/.bin/codex";
 const codexTimeoutMs = Number(process.env.CODEX_RUN_TIMEOUT_MS ?? 10 * 60 * 1000);
 
 const id = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 18);
