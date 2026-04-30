@@ -248,6 +248,17 @@ h2 {
   background: #e9f8f9;
 }
 
+.message.tool {
+  border-style: dashed;
+  background: #fbfdff;
+}
+
+.message.tool p {
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+}
+
 .messageRole {
   margin-bottom: 6px;
   color: var(--muted);

@@ -58,6 +58,7 @@ async function runCodexExec(context: {
   workspacePath: string;
   accountId: string;
   prompt: string;
+  onProgress: (chunk: string) => void;
 }) {
   await fs.mkdir(context.workspacePath, { recursive: true, mode: 0o700 });
   const outputFile = path.join(os.tmpdir(), `server-codex-${id()}.txt`);
@@ -91,10 +92,14 @@ async function runCodexExec(context: {
   const timer = setTimeout(() => child.kill("SIGTERM"), codexTimeoutMs);
 
   child.stdout.on("data", (chunk) => {
-    stdout += chunk.toString();
+    const value = chunk.toString();
+    stdout += value;
+    context.onProgress(value);
   });
   child.stderr.on("data", (chunk) => {
-    stderr += chunk.toString();
+    const value = chunk.toString();
+    stderr += value;
+    context.onProgress(value);
   });
 
   const code = await new Promise<number | null>((resolve, reject) => {
@@ -120,13 +125,38 @@ async function completeRun(run: { id: string; thread_id: string }) {
   let assistantMessage = "";
   let selectedAccount: { id: string; label: string } | undefined;
   const failures: string[] = [];
+  const progressMessageId = `msg_${id()}`;
+  let progressContent = "Codex Runner 已启动...\n";
+  let lastProgressFlush = 0;
+
+  await db.query(
+    `insert into messages (id, thread_id, role, content, metadata_json)
+     values ($1, $2, 'tool', $3, $4)`,
+    [progressMessageId, run.thread_id, progressContent, { runner: "codex-cli", progress: true }]
+  );
+
+  const flushProgress = async (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastProgressFlush < 900) return;
+    lastProgressFlush = now;
+    await db.query(`update messages set content = $2 where id = $1`, [
+      progressMessageId,
+      progressContent.slice(-6000)
+    ]);
+  };
 
   for (const account of context.accounts) {
     try {
+      progressContent += `\n尝试账号：${account.label}\n`;
+      await flushProgress(true);
       assistantMessage = await runCodexExec({
         workspacePath: context.thread.workspace_path,
         accountId: account.id,
-        prompt: context.prompt
+        prompt: context.prompt,
+        onProgress: (chunk) => {
+          progressContent += chunk;
+          void flushProgress();
+        }
       });
       selectedAccount = account;
       break;
@@ -135,6 +165,8 @@ async function completeRun(run: { id: string; thread_id: string }) {
       failures.push(`${account.label}: ${message.slice(0, 220)}`);
 
       if (isCapacityError(message)) {
+        progressContent += `\n账号额度不足，切换下一个账号：${account.label}\n`;
+        await flushProgress(true);
         await db.query(
           `update codex_accounts
            set status = 'exhausted', updated_at = now()
@@ -151,6 +183,8 @@ async function completeRun(run: { id: string; thread_id: string }) {
   if (!selectedAccount) {
     throw new Error(`all Codex accounts failed: ${failures.join(" | ")}`);
   }
+  progressContent += "\nCodex Runner 已完成。";
+  await flushProgress(true);
 
   const client = await db.connect();
   try {

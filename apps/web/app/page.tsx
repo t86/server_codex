@@ -28,6 +28,7 @@ export default function Home() {
     () => threads.find((thread) => thread.id === activeThreadId) ?? null,
     [threads, activeThreadId]
   );
+  const isRunning = activeThread?.status === "running";
 
   async function refreshThreads(selectFirst = false) {
     const result = await listThreads();
@@ -60,6 +61,17 @@ export default function Home() {
       setError(err instanceof Error ? err.message : String(err))
     );
   }, [activeThreadId]);
+
+  useEffect(() => {
+    if (!activeThreadId || (!isRunning && !busy)) return;
+
+    const interval = window.setInterval(() => {
+      void refreshMessages(activeThreadId);
+      void refreshThreads();
+    }, 2000);
+
+    return () => window.clearInterval(interval);
+  }, [activeThreadId, isRunning, busy]);
 
   async function handleNewThread() {
     setBusy(true);
@@ -96,10 +108,17 @@ export default function Home() {
     setBusy(true);
     setError(null);
     try {
-      await sendMessage(activeThreadId, content);
-      await refreshMessages(activeThreadId);
-      window.setTimeout(() => void refreshMessages(activeThreadId), 1800);
-      await refreshThreads();
+      const result = await sendMessage(activeThreadId, content);
+      setMessages((current) => [...current, result.message]);
+      setThreads((current) =>
+        current.map((thread) =>
+          thread.id === activeThreadId ? { ...thread, status: "running" } : thread
+        )
+      );
+      window.setTimeout(() => {
+        void refreshMessages(activeThreadId);
+        void refreshThreads();
+      }, 800);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -170,7 +189,7 @@ export default function Home() {
             150 控制节点
           </span>
           <span>111 / 114 SSH 待配置</span>
-          <span>CLI Runner</span>
+          <span>{isRunning ? "运行中" : "CLI Runner"}</span>
         </div>
 
         {error ? <div className="errorBox">{error}</div> : null}
@@ -189,6 +208,12 @@ export default function Home() {
               <p>{message.content}</p>
             </article>
           ))}
+          {isRunning ? (
+            <article className="message tool">
+              <div className="messageRole">status</div>
+              <p>Codex 正在执行，页面会自动刷新...</p>
+            </article>
+          ) : null}
         </div>
 
         <form className="composer" onSubmit={handleSend}>
@@ -196,10 +221,14 @@ export default function Home() {
             value={composer}
             onChange={(event) => setComposer(event.target.value)}
             placeholder={activeThread ? "输入任务或问题..." : "先选择线程"}
-            disabled={!activeThread || busy}
+            disabled={!activeThread || busy || isRunning}
             rows={1}
           />
-          <button className="sendButton" type="submit" disabled={!activeThread || busy || !composer.trim()}>
+          <button
+            className="sendButton"
+            type="submit"
+            disabled={!activeThread || busy || isRunning || !composer.trim()}
+          >
             <Send size={18} />
           </button>
         </form>
