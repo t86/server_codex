@@ -54,3 +54,23 @@ docker compose up -d --build
 - `redis`
 
 第一版 Runner 目前是占位实现：它会消费 queued run 并写回一条 assistant 消息，后续接入真实 Codex CLI。
+
+## 部署到 150
+
+先在 150 上生成专用运维 key，并把公钥安装到 111/114：
+
+```bash
+./scripts/setup-ops-ssh-keys.sh
+```
+
+部署 Web/API/Runner 到 150：
+
+```bash
+./scripts/deploy-150.sh
+```
+
+部署完成后，手机可先通过下面地址访问：
+
+```text
+http://43.131.232.150:3000
+```
