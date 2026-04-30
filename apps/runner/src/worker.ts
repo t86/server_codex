@@ -41,17 +41,16 @@ async function getRunContext(run: { thread_id: string }) {
     `select content from messages where thread_id = $1 and role = 'user' order by created_at desc limit 1`,
     [run.thread_id]
   );
-  const account = await db.query(
+  const accounts = await db.query(
     `select id, label from codex_accounts
      where status = 'active'
-     order by priority asc, last_used_at asc nulls first, updated_at desc
-     limit 1`
+     order by priority asc, last_used_at asc nulls first, updated_at desc`
   );
 
   return {
     thread: thread.rows[0],
     prompt: message.rows[0]?.content as string | undefined,
-    account: account.rows[0] as { id: string; label: string } | undefined
+    accounts: accounts.rows as { id: string; label: string }[]
   };
 }
 
@@ -116,13 +115,42 @@ async function completeRun(run: { id: string; thread_id: string }) {
   const context = await getRunContext(run);
   if (!context.thread) throw new Error("thread not found");
   if (!context.prompt) throw new Error("no user message found");
-  if (!context.account) throw new Error("no active Codex account imported");
+  if (context.accounts.length === 0) throw new Error("no active Codex account imported");
 
-  const assistantMessage = await runCodexExec({
-    workspacePath: context.thread.workspace_path,
-    accountId: context.account.id,
-    prompt: context.prompt
-  });
+  let assistantMessage = "";
+  let selectedAccount: { id: string; label: string } | undefined;
+  const failures: string[] = [];
+
+  for (const account of context.accounts) {
+    try {
+      assistantMessage = await runCodexExec({
+        workspacePath: context.thread.workspace_path,
+        accountId: account.id,
+        prompt: context.prompt
+      });
+      selectedAccount = account;
+      break;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(`${account.label}: ${message.slice(0, 220)}`);
+
+      if (isCapacityError(message)) {
+        await db.query(
+          `update codex_accounts
+           set status = 'exhausted', updated_at = now()
+           where id = $1`,
+          [account.id]
+        );
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  if (!selectedAccount) {
+    throw new Error(`all Codex accounts failed: ${failures.join(" | ")}`);
+  }
 
   const client = await db.connect();
   try {
@@ -134,11 +162,11 @@ async function completeRun(run: { id: string; thread_id: string }) {
         `msg_${id()}`,
         run.thread_id,
         assistantMessage,
-        { runner: "codex-cli", accountId: context.account.id }
+        { runner: "codex-cli", accountId: selectedAccount.id }
       ]
     );
     await client.query(`update codex_accounts set last_used_at = now() where id = $1`, [
-      context.account.id
+      selectedAccount.id
     ]);
     await client.query(
       `update runs set status = 'succeeded', finished_at = now() where id = $1`,
@@ -155,6 +183,17 @@ async function completeRun(run: { id: string; thread_id: string }) {
   } finally {
     client.release();
   }
+}
+
+function isCapacityError(message: string) {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("usage limit") ||
+    lower.includes("rate limit") ||
+    lower.includes("quota") ||
+    lower.includes("more credits") ||
+    lower.includes("try again at")
+  );
 }
 
 async function failRun(run: { id: string; thread_id: string }, error: unknown) {
