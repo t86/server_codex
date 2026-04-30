@@ -22,3 +22,35 @@ See [docs/design.md](docs/design.md) for the current architecture and implementa
 3. Configure `150` as the operations node for `111` and `114`.
 4. Add account pool import and failover.
 5. Add skills, plugins, and scheduled tasks.
+
+## 本地开发
+
+```bash
+npm install
+docker compose up -d postgres redis
+npm run db:migrate
+npm run dev:api
+npm run dev:runner
+npm run dev:web
+```
+
+默认地址：
+
+- Web: <http://localhost:3000>
+- API: <http://localhost:4000>
+
+## Docker 启动
+
+```bash
+docker compose up -d --build
+```
+
+这会启动：
+
+- `web`
+- `api`
+- `runner`
+- `postgres`
+- `redis`
+
+第一版 Runner 目前是占位实现：它会消费 queued run 并写回一条 assistant 消息，后续接入真实 Codex CLI。

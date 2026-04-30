@@ -1,0 +1,24 @@
+{
+  "name": "server-codex",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @server-codex/api & npm run dev -w @server-codex/web",
+    "dev:api": "npm run dev -w @server-codex/api",
+    "dev:web": "npm run dev -w @server-codex/web",
+    "dev:runner": "npm run dev -w @server-codex/runner",
+    "build": "npm run build -w @server-codex/api && npm run build -w @server-codex/runner && npm run build -w @server-codex/web",
+    "typecheck": "npm run typecheck -w @server-codex/api && npm run typecheck -w @server-codex/runner && npm run typecheck -w @server-codex/web",
+    "lint": "npm run lint -w @server-codex/web",
+    "db:migrate": "node scripts/migrate.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,8 @@
+.git
+.next
+node_modules
+apps/*/node_modules
+apps/web/.next
+data
+.DS_Store
+npm-debug.log
