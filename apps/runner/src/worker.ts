@@ -72,8 +72,6 @@ async function runCodexExec(context: {
     "--skip-git-repo-check",
     "--sandbox",
     "danger-full-access",
-    "-a",
-    "never",
     "--output-last-message",
     outputFile,
     context.prompt
