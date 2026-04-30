@@ -82,3 +82,9 @@ http://43.131.232.150:3000
 ```bash
 ./scripts/import-local-accounts-150.sh
 ```
+
+同步本机 Codex skills/plugins 到 150，并挂到每个账号的 `CODEX_HOME`：
+
+```bash
+./scripts/sync-local-codex-assets-150.sh
+```

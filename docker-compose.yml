@@ -9,7 +9,7 @@ services:
       CODEX_DATA_DIR: /srv/codex
       API_PORT: 4000
     volumes:
-      - codex-data:/srv/codex
+      - /srv/codex:/srv/codex
     depends_on:
       postgres:
         condition: service_healthy
@@ -26,7 +26,7 @@ services:
       CODEX_DATA_DIR: /srv/codex
       CODEX_BIN: /app/node_modules/.bin/codex
     volumes:
-      - codex-data:/srv/codex
+      - /srv/codex:/srv/codex
     depends_on:
       api:
         condition: service_started
@@ -70,6 +70,5 @@ services:
       retries: 10
 
 volumes:
-  codex-data:
   postgres-data:
   redis-data:
