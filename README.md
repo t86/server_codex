@@ -76,3 +76,9 @@ http://43.131.232.150:3000
 ```
 
 公网只暴露 Web 的 `3000` 端口。Web 默认启用 Basic Auth，部署脚本会在 150 的 `.env` 中生成密码。
+
+导入本机 `codex-account` 账号池到 150：
+
+```bash
+./scripts/import-local-accounts-150.sh
+```

@@ -14,3 +14,7 @@ export function messageId() {
 export function runId() {
   return `run_${id()}`;
 }
+
+export function accountId() {
+  return `acct_${id()}`;
+}

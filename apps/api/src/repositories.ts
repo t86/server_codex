@@ -3,7 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { paths } from "./config.js";
 import { db } from "./db.js";
-import { messageId, runId, threadId } from "./ids.js";
+import { accountId, messageId, runId, threadId } from "./ids.js";
 
 export const OWNER_USER_ID = "usr_owner";
 
@@ -142,4 +142,87 @@ export async function listServerProfiles() {
     `select * from server_profiles order by name asc`
   );
   return result.rows;
+}
+
+const codexToolsAccountSchema = z.object({
+  id: z.string().optional(),
+  label: z.string().optional(),
+  email: z.string().nullable().optional(),
+  accountId: z.string(),
+  planType: z.string().nullable().optional(),
+  authJson: z.record(z.unknown())
+});
+
+export const importAccountsInput = z.object({
+  accounts: z.array(codexToolsAccountSchema).min(1)
+});
+
+export async function listAccounts() {
+  const result = await db.query(
+    `select id, label, email_masked, plan_type, status, priority,
+            current_5h_usage, current_week_usage, reset_5h_at, reset_week_at,
+            last_used_at, created_at, updated_at
+     from codex_accounts
+     order by priority asc, updated_at desc`
+  );
+  return result.rows;
+}
+
+function maskEmail(email?: string | null) {
+  if (!email) return null;
+  const [name, domain] = email.split("@");
+  if (!domain) return email;
+  const left = name.length <= 2 ? `${name[0] ?? ""}*` : `${name.slice(0, 2)}***`;
+  return `${left}@${domain}`;
+}
+
+export async function importAccounts(input: z.infer<typeof importAccountsInput>) {
+  await fs.mkdir(path.join(paths.secrets, "accounts"), { recursive: true, mode: 0o700 });
+  await fs.mkdir(path.join(paths.codexHome, "accounts"), { recursive: true, mode: 0o700 });
+
+  let imported = 0;
+  let updated = 0;
+
+  for (const account of input.accounts) {
+    const existing = await db.query<{ id: string }>(
+      `select id from codex_accounts where secret_ref = $1`,
+      [`codex-tools:${account.accountId}`]
+    );
+    const id = existing.rows[0]?.id ?? accountId();
+    const accountSecretDir = path.join(paths.secrets, "accounts", id);
+    const accountHomeDir = path.join(paths.codexHome, "accounts", id);
+    await fs.mkdir(accountSecretDir, { recursive: true, mode: 0o700 });
+    await fs.mkdir(accountHomeDir, { recursive: true, mode: 0o700 });
+
+    const authJson = JSON.stringify(account.authJson, null, 2);
+    await fs.writeFile(path.join(accountSecretDir, "auth.json"), authJson, { mode: 0o600 });
+    await fs.writeFile(path.join(accountHomeDir, "auth.json"), authJson, { mode: 0o600 });
+
+    const values = [
+      id,
+      account.label || account.email || account.accountId,
+      maskEmail(account.email),
+      account.planType || "unknown",
+      `codex-tools:${account.accountId}`
+    ];
+
+    const result = await db.query(
+      `insert into codex_accounts (id, label, email_masked, plan_type, secret_ref)
+       values ($1, $2, $3, $4, $5)
+       on conflict (id) do update
+       set label = excluded.label,
+           email_masked = excluded.email_masked,
+           plan_type = excluded.plan_type,
+           status = 'active',
+           secret_ref = excluded.secret_ref,
+           updated_at = now()
+       returning xmax = 0 as inserted`,
+      values
+    );
+
+    if (result.rows[0]?.inserted) imported += 1;
+    else updated += 1;
+  }
+
+  return { imported, updated };
 }

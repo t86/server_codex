@@ -10,6 +10,9 @@ import {
   createThreadInput,
   createUserMessage,
   getThread,
+  importAccounts,
+  importAccountsInput,
+  listAccounts,
   listMessages,
   listServerProfiles,
   listThreads,
@@ -97,6 +100,16 @@ app.post("/threads/:id/messages", async (request, reply) => {
 app.get("/servers", async () => ({
   servers: await listServerProfiles()
 }));
+
+app.get("/accounts", async () => ({
+  accounts: await listAccounts()
+}));
+
+app.post("/accounts/import", async (request, reply) => {
+  const input = importAccountsInput.parse(request.body ?? {});
+  const result = await importAccounts(input);
+  return reply.status(201).send(result);
+});
 
 const close = async () => {
   await app.close();
