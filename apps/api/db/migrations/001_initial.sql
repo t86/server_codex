@@ -14,7 +14,7 @@ create table if not exists threads (
   workspace_path text not null,
   account_mode text not null default 'auto',
   pinned_account_id text,
-  model text not null default 'codex-cli',
+  model text not null default 'gpt-5.5',
   status text not null default 'idle',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

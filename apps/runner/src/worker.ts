@@ -79,7 +79,7 @@ async function runCodexExec(context: {
     "--output-last-message",
     outputFile
   ];
-  if (context.model && context.model !== "codex-cli") {
+  if (context.model) {
     args.push("--model", context.model);
   }
   for (const imagePath of context.imagePaths) {

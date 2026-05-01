@@ -29,7 +29,6 @@ import {
 type ViewMode = "threads" | "chat";
 
 const MODEL_OPTIONS = [
-  { value: "codex-cli", label: "CLI 默认" },
   { value: "gpt-5.5", label: "GPT-5.5" },
   { value: "gpt-5.4", label: "GPT-5.4" },
   { value: "gpt-5.4-mini", label: "GPT-5.4 Mini" },
@@ -245,7 +244,7 @@ export default function Home() {
           <label className="modelControl">
             <Cpu size={16} />
             <select
-              value={activeThread?.model ?? "codex-cli"}
+              value={activeThread?.model ?? "gpt-5.5"}
               onChange={(event) => void handleModelChange(event.target.value)}
               disabled={!activeThread || busy || isRunning}
             >
