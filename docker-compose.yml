@@ -27,6 +27,8 @@ services:
       CODEX_BIN: /app/node_modules/.bin/codex
     volumes:
       - /srv/codex:/srv/codex
+      - /home/ubuntu/wangge_api2_repo:/servers/150/wangge_api2_repo
+      - /home/ubuntu/wangge_api2:/servers/150/wangge_api2
     depends_on:
       api:
         condition: service_started

@@ -2,6 +2,8 @@ FROM node:22-alpine AS base
 
 WORKDIR /app
 
+RUN apk add --no-cache openssh-client
+
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/runner/package.json apps/runner/package.json
