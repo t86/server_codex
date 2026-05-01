@@ -12,7 +12,19 @@ export type Message = {
   thread_id: string;
   role: "user" | "assistant" | "system" | "tool";
   content: string;
+  metadata_json: {
+    attachments?: Attachment[];
+  };
   created_at: string;
+};
+
+export type Attachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  path: string;
+  size: number;
+  url?: string;
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
@@ -53,13 +65,39 @@ export async function renameThread(id: string, displayName: string) {
   });
 }
 
+export async function updateThreadModel(id: string, model: string) {
+  return request<{ thread: Thread }>(`/threads/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ model })
+  });
+}
+
 export async function listMessages(threadId: string) {
   return request<{ messages: Message[] }>(`/threads/${threadId}/messages`);
 }
 
-export async function sendMessage(threadId: string, content: string) {
+export async function uploadAttachments(threadId: string, files: File[]) {
+  const body = new FormData();
+  for (const file of files) {
+    body.append("files", file);
+  }
+
+  const response = await fetch(`${API_BASE}/threads/${threadId}/attachments`, {
+    method: "POST",
+    body,
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+
+  return response.json() as Promise<{ attachments: Attachment[] }>;
+}
+
+export async function sendMessage(threadId: string, content: string, attachments: Attachment[] = []) {
   return request<{ message: Message; run: unknown }>(`/threads/${threadId}/messages`, {
     method: "POST",
-    body: JSON.stringify({ content })
+    body: JSON.stringify({ content, attachments })
   });
 }

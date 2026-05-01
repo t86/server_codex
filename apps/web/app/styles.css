@@ -29,7 +29,8 @@ body {
 }
 
 button,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -225,6 +226,28 @@ h2 {
   font-size: 13px;
 }
 
+.modelControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #39525c;
+  background: #fff;
+  font-size: 13px;
+}
+
+.modelControl select {
+  max-width: 150px;
+  border: 0;
+  color: #263b44;
+  background: transparent;
+  outline: none;
+}
+
 .messages {
   flex: 1;
   min-height: 0;
@@ -274,6 +297,38 @@ h2 {
   line-height: 1.55;
 }
 
+.attachmentGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.attachmentThumb {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.attachmentThumb img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.attachmentThumb span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .emptyState {
   display: grid;
   place-items: center;
@@ -302,13 +357,27 @@ h2 {
   right: 0;
   bottom: 0;
   left: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 48px;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 12px 14px max(12px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(14px);
+}
+
+.composerRow {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  gap: 10px;
+}
+
+.composer input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
 }
 
 .composer textarea {
@@ -334,6 +403,48 @@ h2 {
   border-color: var(--accent);
   color: #fff;
   background: var(--accent);
+}
+
+.attachButton {
+  width: 48px;
+  height: 48px;
+}
+
+.selectedFiles {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.selectedFile {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  min-height: 30px;
+  flex: none;
+  padding: 0 6px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12px;
+}
+
+.selectedFile span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectedFile button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
 }
 
 .sendButton:hover {
@@ -375,11 +486,15 @@ h2 {
   }
 
   .composer {
-    grid-template-columns: minmax(0, 1fr) 52px;
     padding: 16px 22px;
   }
 
-  .sendButton {
+  .composerRow {
+    grid-template-columns: 52px minmax(0, 1fr) 52px;
+  }
+
+  .sendButton,
+  .attachButton {
     width: 52px;
     height: 52px;
   }

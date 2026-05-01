@@ -1,18 +1,39 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Archive, Bot, Menu, MessageSquarePlus, Pencil, RefreshCw, Send, Server } from "lucide-react";
+import {
+  Archive,
+  Bot,
+  Cpu,
+  ImagePlus,
+  Menu,
+  MessageSquarePlus,
+  Pencil,
+  RefreshCw,
+  Send,
+  Server,
+  X
+} from "lucide-react";
 import {
   createThread,
   listMessages,
   listThreads,
   renameThread,
   sendMessage,
+  updateThreadModel,
+  uploadAttachments,
   type Message,
   type Thread
 } from "@/lib/api";
 
 type ViewMode = "threads" | "chat";
+
+const MODEL_OPTIONS = [
+  { value: "codex-cli", label: "CLI 默认" },
+  { value: "gpt-5.5", label: "GPT-5.5" },
+  { value: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
+  { value: "gpt-5.2", label: "GPT-5.2" }
+];
 
 export default function Home() {
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -23,6 +44,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const activeThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId) ?? null,
@@ -99,16 +121,37 @@ export default function Home() {
     );
   }
 
-  async function handleSend(event: FormEvent) {
-    event.preventDefault();
-    if (!activeThreadId || !composer.trim()) return;
-
-    const content = composer.trim();
-    setComposer("");
+  async function handleModelChange(model: string) {
+    if (!activeThread || model === activeThread.model) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await sendMessage(activeThreadId, content);
+      const result = await updateThreadModel(activeThread.id, model);
+      setThreads((current) =>
+        current.map((thread) => (thread.id === result.thread.id ? result.thread : thread))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSend(event: FormEvent) {
+    event.preventDefault();
+    if (!activeThreadId || (!composer.trim() && selectedFiles.length === 0)) return;
+
+    const content = composer.trim();
+    setComposer("");
+    const filesToSend = selectedFiles;
+    setSelectedFiles([]);
+    setBusy(true);
+    setError(null);
+    try {
+      const uploaded = filesToSend.length
+        ? await uploadAttachments(activeThreadId, filesToSend)
+        : { attachments: [] };
+      const result = await sendMessage(activeThreadId, content, uploaded.attachments);
       setMessages((current) => [...current, result.message]);
       setThreads((current) =>
         current.map((thread) =>
@@ -120,10 +163,17 @@ export default function Home() {
         void refreshThreads();
       }, 800);
     } catch (err) {
+      setSelectedFiles(filesToSend);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleAddFiles(files: FileList | null) {
+    if (!files) return;
+    const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    setSelectedFiles((current) => [...current, ...images].slice(0, 8));
   }
 
   return (
@@ -188,8 +238,22 @@ export default function Home() {
             <Server size={16} />
             150 控制节点
           </span>
-          <span>111 / 114 SSH 待配置</span>
+          <span>111 / 114 SSH 已配置</span>
           <span>{isRunning ? "运行中" : "CLI Runner"}</span>
+          <label className="modelControl">
+            <Cpu size={16} />
+            <select
+              value={activeThread?.model ?? "codex-cli"}
+              onChange={(event) => void handleModelChange(event.target.value)}
+              disabled={!activeThread || busy || isRunning}
+            >
+              {MODEL_OPTIONS.map((model) => (
+                <option key={model.value} value={model.value}>
+                  {model.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {error ? <div className="errorBox">{error}</div> : null}
@@ -205,7 +269,23 @@ export default function Home() {
           {messages.filter((message) => message.role !== "tool").map((message) => (
             <article className={`message ${message.role}`} key={message.id}>
               <div className="messageRole">{message.role}</div>
-              <p>{message.content}</p>
+              {message.content ? <p>{message.content}</p> : null}
+              {message.metadata_json?.attachments?.length ? (
+                <div className="attachmentGrid">
+                  {message.metadata_json.attachments.map((attachment) => (
+                    <a
+                      className="attachmentThumb"
+                      href={attachment.url ?? "#"}
+                      key={attachment.id}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {attachment.url ? <img src={attachment.url} alt={attachment.name} /> : null}
+                      <span>{attachment.name}</span>
+                    </a>
+                  ))}
+                </div>
+              ) : null}
             </article>
           ))}
           {isRunning ? (
@@ -217,20 +297,54 @@ export default function Home() {
         </div>
 
         <form className="composer" onSubmit={handleSend}>
-          <textarea
-            value={composer}
-            onChange={(event) => setComposer(event.target.value)}
-            placeholder={activeThread ? "输入任务或问题..." : "先选择线程"}
-            disabled={!activeThread || busy || isRunning}
-            rows={1}
-          />
-          <button
-            className="sendButton"
-            type="submit"
-            disabled={!activeThread || busy || isRunning || !composer.trim()}
-          >
-            <Send size={18} />
-          </button>
+          {selectedFiles.length ? (
+            <div className="selectedFiles">
+              {selectedFiles.map((file, index) => (
+                <div className="selectedFile" key={`${file.name}-${file.lastModified}-${index}`}>
+                  <span>{file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))
+                    }
+                    aria-label="移除图片"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div className="composerRow">
+            <input
+              id="imageInput"
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(event) => {
+                handleAddFiles(event.target.files);
+                event.target.value = "";
+              }}
+              disabled={!activeThread || busy || isRunning}
+            />
+            <label className="iconButton attachButton" htmlFor="imageInput" aria-label="添加图片">
+              <ImagePlus size={18} />
+            </label>
+            <textarea
+              value={composer}
+              onChange={(event) => setComposer(event.target.value)}
+              placeholder={activeThread ? "输入任务或问题..." : "先选择线程"}
+              disabled={!activeThread || busy || isRunning}
+              rows={1}
+            />
+            <button
+              className="sendButton"
+              type="submit"
+              disabled={!activeThread || busy || isRunning || (!composer.trim() && selectedFiles.length === 0)}
+            >
+              <Send size={18} />
+            </button>
+          </div>
         </form>
       </section>
     </main>

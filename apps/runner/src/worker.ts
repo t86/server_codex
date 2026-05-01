@@ -34,11 +34,11 @@ async function claimRun() {
 
 async function getRunContext(run: { thread_id: string }) {
   const thread = await db.query(
-    `select id, workspace_path, pinned_account_id from threads where id = $1`,
+    `select id, workspace_path, pinned_account_id, model from threads where id = $1`,
     [run.thread_id]
   );
   const message = await db.query(
-    `select content from messages where thread_id = $1 and role = 'user' order by created_at desc limit 1`,
+    `select content, metadata_json from messages where thread_id = $1 and role = 'user' order by created_at desc limit 1`,
     [run.thread_id]
   );
   const accounts = await db.query(
@@ -50,6 +50,7 @@ async function getRunContext(run: { thread_id: string }) {
   return {
     thread: thread.rows[0],
     prompt: message.rows[0]?.content as string | undefined,
+    attachments: getMessageAttachments(message.rows[0]?.metadata_json),
     accounts: accounts.rows as { id: string; label: string }[]
   };
 }
@@ -58,6 +59,8 @@ async function runCodexExec(context: {
   workspacePath: string;
   accountId: string;
   prompt: string;
+  model?: string;
+  imagePaths: string[];
   onProgress: (chunk: string) => void;
 }) {
   await fs.mkdir(context.workspacePath, { recursive: true, mode: 0o700 });
@@ -74,9 +77,15 @@ async function runCodexExec(context: {
     "--sandbox",
     "danger-full-access",
     "--output-last-message",
-    outputFile,
-    context.prompt
+    outputFile
   ];
+  if (context.model && context.model !== "codex-cli") {
+    args.push("--model", context.model);
+  }
+  for (const imagePath of context.imagePaths) {
+    args.push("--image", imagePath);
+  }
+  args.push(context.prompt);
 
   const child = spawn(codexBin, args, {
     env: {
@@ -120,7 +129,7 @@ async function runCodexExec(context: {
 async function completeRun(run: { id: string; thread_id: string }) {
   const context = await getRunContext(run);
   if (!context.thread) throw new Error("thread not found");
-  if (!context.prompt) throw new Error("no user message found");
+  if (!context.prompt && context.attachments.length === 0) throw new Error("no user message found");
   if (context.accounts.length === 0) throw new Error("no active Codex account imported");
 
   let assistantMessage = "";
@@ -153,7 +162,9 @@ async function completeRun(run: { id: string; thread_id: string }) {
       assistantMessage = await runCodexExec({
         workspacePath: context.thread.workspace_path,
         accountId: account.id,
-        prompt: context.prompt,
+        prompt: context.prompt || "请根据附件继续处理。",
+        model: context.thread.model,
+        imagePaths: context.attachments.map((attachment) => attachment.path),
         onProgress: (chunk) => {
           progressContent += chunk;
           void flushProgress();
@@ -231,6 +242,19 @@ async function completeRun(run: { id: string; thread_id: string }) {
   } finally {
     client.release();
   }
+}
+
+function getMessageAttachments(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") return [];
+  const attachments = (metadata as { attachments?: unknown }).attachments;
+  if (!Array.isArray(attachments)) return [];
+  return attachments
+    .map((attachment) => {
+      if (!attachment || typeof attachment !== "object") return null;
+      const item = attachment as { path?: unknown };
+      return typeof item.path === "string" ? { path: item.path } : null;
+    })
+    .filter((attachment): attachment is { path: string } => attachment !== null);
 }
 
 async function ensureAccountHome(accountHome: string) {

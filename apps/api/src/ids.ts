@@ -11,6 +11,10 @@ export function messageId() {
   return `msg_${id()}`;
 }
 
+export function attachmentId() {
+  return `att_${id()}`;
+}
+
 export function runId() {
   return `run_${id()}`;
 }

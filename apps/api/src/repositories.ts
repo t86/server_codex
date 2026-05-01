@@ -29,6 +29,15 @@ export type MessageRow = {
   created_at: string;
 };
 
+export type MessageAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  path: string;
+  size: number;
+  url?: string;
+};
+
 export const createThreadInput = z.object({
   displayName: z.string().trim().min(1).max(120).optional()
 });
@@ -58,17 +67,26 @@ export async function createThread(input: z.infer<typeof createThreadInput>) {
   return result.rows[0];
 }
 
-export const renameThreadInput = z.object({
-  displayName: z.string().trim().min(1).max(120)
-});
+const modelSchema = z.string().trim().min(1).max(80);
 
-export async function renameThread(id: string, input: z.infer<typeof renameThreadInput>) {
+export const updateThreadInput = z
+  .object({
+    displayName: z.string().trim().min(1).max(120).optional(),
+    model: modelSchema.optional()
+  })
+  .refine((input) => input.displayName !== undefined || input.model !== undefined, {
+    message: "displayName or model is required"
+  });
+
+export async function updateThread(id: string, input: z.infer<typeof updateThreadInput>) {
   const result = await db.query<ThreadRow>(
     `update threads
-     set display_name = $2, updated_at = now()
-     where id = $1 and user_id = $3
+     set display_name = coalesce($2, display_name),
+         model = coalesce($3, model),
+         updated_at = now()
+     where id = $1 and user_id = $4
      returning *`,
-    [id, input.displayName, OWNER_USER_ID]
+    [id, input.displayName, input.model, OWNER_USER_ID]
   );
   return result.rows[0] ?? null;
 }
@@ -101,18 +119,38 @@ export async function listMessages(threadId: string) {
 }
 
 export const createMessageInput = z.object({
-  content: z.string().trim().min(1).max(20000)
+  content: z.string().trim().max(20000).optional().default(""),
+  attachments: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        name: z.string().min(1).max(240),
+        mimeType: z.string().min(1).max(120),
+        path: z.string().min(1),
+        size: z.number().int().nonnegative(),
+        url: z.string().min(1).optional()
+      })
+    )
+    .max(8)
+    .optional()
+    .default([])
+}).refine((input) => input.content.length > 0 || input.attachments.length > 0, {
+  message: "content or attachments is required"
 });
 
-export async function createUserMessage(threadIdValue: string, content: string) {
+export async function createUserMessage(
+  threadIdValue: string,
+  content: string,
+  attachments: MessageAttachment[] = []
+) {
   const client = await db.connect();
   try {
     await client.query("begin");
     const msg = await client.query<MessageRow>(
-      `insert into messages (id, thread_id, role, content)
-       values ($1, $2, 'user', $3)
+      `insert into messages (id, thread_id, role, content, metadata_json)
+       values ($1, $2, 'user', $3, $4)
        returning *`,
-      [messageId(), threadIdValue, content]
+      [messageId(), threadIdValue, content, { attachments }]
     );
 
     const run = await client.query(
