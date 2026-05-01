@@ -2,7 +2,9 @@ FROM node:22-alpine AS base
 
 WORKDIR /app
 
-RUN apk add --no-cache openssh-client
+RUN apk add --no-cache git openssh-client \
+  && git config --system --add safe.directory /srv/codex/repos/grid_trading \
+  && git config --system --add safe.directory /servers/150/wangge_api2_repo
 
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json
