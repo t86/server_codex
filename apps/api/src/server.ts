@@ -13,6 +13,7 @@ import {
   createThread,
   createThreadInput,
   createUserMessage,
+  deleteThreadPermanently,
   getThread,
   importAccounts,
   importAccountsInput,
@@ -88,6 +89,13 @@ app.patch("/threads/:id", async (request, reply) => {
 app.delete("/threads/:id", async (request, reply) => {
   const { id } = request.params as { id: string };
   const thread = await archiveThread(id);
+  if (!thread) return reply.status(404).send({ error: "thread_not_found" });
+  return reply.status(204).send();
+});
+
+app.delete("/threads/:id/permanent", async (request, reply) => {
+  const { id } = request.params as { id: string };
+  const thread = await deleteThreadPermanently(id);
   if (!thread) return reply.status(404).send({ error: "thread_not_found" });
   return reply.status(204).send();
 });

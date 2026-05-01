@@ -102,6 +102,37 @@ export async function archiveThread(id: string) {
   return result.rows[0] ?? null;
 }
 
+export async function deleteThreadPermanently(id: string) {
+  const client = await db.connect();
+  let thread: ThreadRow | null = null;
+  try {
+    await client.query("begin");
+    const existing = await client.query<ThreadRow>(
+      `select * from threads where id = $1 and user_id = $2 for update`,
+      [id, OWNER_USER_ID]
+    );
+    thread = existing.rows[0] ?? null;
+    if (!thread) {
+      await client.query("rollback");
+      return null;
+    }
+
+    await client.query(`delete from threads where id = $1 and user_id = $2`, [
+      id,
+      OWNER_USER_ID
+    ]);
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  await fs.rm(thread.workspace_path, { recursive: true, force: true });
+  return thread;
+}
+
 export async function getThread(id: string) {
   const result = await db.query<ThreadRow>(
     `select * from threads where id = $1 and user_id = $2`,

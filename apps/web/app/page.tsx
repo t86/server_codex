@@ -12,10 +12,13 @@ import {
   RefreshCw,
   Send,
   Server,
+  Trash2,
   X
 } from "lucide-react";
 import {
+  archiveThread,
   createThread,
+  deleteThreadPermanently,
   listMessages,
   listThreads,
   renameThread,
@@ -120,6 +123,46 @@ export default function Home() {
     setThreads((current) =>
       current.map((thread) => (thread.id === result.thread.id ? result.thread : thread))
     );
+  }
+
+  async function handleArchive() {
+    if (!activeThread) return;
+    if (!window.confirm(`归档线程「${activeThread.display_name}」？`)) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      await archiveThread(activeThread.id);
+      setThreads((current) => current.filter((thread) => thread.id !== activeThread.id));
+      setActiveThreadId(null);
+      setMessages([]);
+      setViewMode("threads");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handlePermanentDelete() {
+    if (!activeThread) return;
+    if (!window.confirm(`永久删除线程「${activeThread.display_name}」？这会删除聊天记录和线程目录。`)) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteThreadPermanently(activeThread.id);
+      setThreads((current) => current.filter((thread) => thread.id !== activeThread.id));
+      setActiveThreadId(null);
+      setMessages([]);
+      setViewMode("threads");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleModelChange(model: string) {
@@ -228,8 +271,23 @@ export default function Home() {
             <button className="iconButton" type="button" onClick={handleRename} disabled={!activeThread}>
               <Pencil size={18} />
             </button>
-            <button className="iconButton" type="button" disabled>
+            <button
+              className="iconButton"
+              type="button"
+              onClick={handleArchive}
+              disabled={!activeThread || busy || isRunning}
+              title="归档线程"
+            >
               <Archive size={18} />
+            </button>
+            <button
+              className="iconButton dangerButton"
+              type="button"
+              onClick={handlePermanentDelete}
+              disabled={!activeThread || busy || isRunning}
+              title="永久删除"
+            >
+              <Trash2 size={18} />
             </button>
           </div>
         </header>

@@ -148,6 +148,15 @@ h2 {
   border-color: #a9c4cc;
 }
 
+.dangerButton {
+  color: var(--danger);
+}
+
+.dangerButton:hover {
+  border-color: #dda0a0;
+  background: #fff4f4;
+}
+
 .primaryButton {
   display: inline-flex;
   align-items: center;

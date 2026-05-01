@@ -72,6 +72,18 @@ export async function updateThreadModel(id: string, model: string) {
   });
 }
 
+export async function archiveThread(id: string) {
+  return request<void>(`/threads/${id}`, {
+    method: "DELETE"
+  });
+}
+
+export async function deleteThreadPermanently(id: string) {
+  return request<void>(`/threads/${id}/permanent`, {
+    method: "DELETE"
+  });
+}
+
 export async function listMessages(threadId: string) {
   return request<{ messages: Message[] }>(`/threads/${threadId}/messages`);
 }
