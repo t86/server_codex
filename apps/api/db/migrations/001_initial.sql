@@ -15,6 +15,8 @@ create table if not exists threads (
   account_mode text not null default 'auto',
   pinned_account_id text,
   model text not null default 'gpt-5.5',
+  codex_session_id text,
+  codex_session_account_id text,
   status text not null default 'idle',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

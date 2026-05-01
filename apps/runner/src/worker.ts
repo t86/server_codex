@@ -33,24 +33,50 @@ async function claimRun() {
 }
 
 async function getRunContext(run: { thread_id: string }) {
-  const thread = await db.query(
-    `select id, workspace_path, pinned_account_id, model from threads where id = $1`,
+  const thread = await db.query<{
+    id: string;
+    workspace_path: string;
+    pinned_account_id: string | null;
+    model: string;
+    codex_session_id: string | null;
+    codex_session_account_id: string | null;
+  }>(
+    `select id, workspace_path, pinned_account_id, model, codex_session_id, codex_session_account_id
+     from threads
+     where id = $1`,
     [run.thread_id]
   );
   const message = await db.query(
     `select content, metadata_json from messages where thread_id = $1 and role = 'user' order by created_at desc limit 1`,
     [run.thread_id]
   );
+  const seedMessages = await db.query<{ role: string; content: string }>(
+    `select role, content
+     from (
+       select role, content, created_at
+       from messages
+       where thread_id = $1 and role in ('user', 'assistant')
+       order by created_at desc
+       limit 8
+     ) recent_messages
+     order by created_at asc`,
+    [run.thread_id]
+  );
   const accounts = await db.query(
     `select id, label from codex_accounts
      where status = 'active'
-     order by priority asc, last_used_at asc nulls first, updated_at desc`
+     order by case when id = $1 then 0 else 1 end,
+              priority asc,
+              last_used_at asc nulls first,
+              updated_at desc`,
+    [thread.rows[0]?.codex_session_account_id ?? null]
   );
 
   return {
     thread: thread.rows[0],
     prompt: message.rows[0]?.content as string | undefined,
     attachments: getMessageAttachments(message.rows[0]?.metadata_json),
+    seedMessages: seedMessages.rows,
     accounts: accounts.rows as { id: string; label: string }[]
   };
 }
@@ -61,6 +87,7 @@ async function runCodexExec(context: {
   prompt: string;
   model?: string;
   imagePaths: string[];
+  resumeSessionId?: string | null;
   onProgress: (chunk: string) => void;
 }) {
   await fs.mkdir(context.workspacePath, { recursive: true, mode: 0o700 });
@@ -69,21 +96,35 @@ async function runCodexExec(context: {
   const sshConfig = path.join(codexDataDir, "secrets", "ssh", "config");
   await ensureAccountHome(accountHome);
 
-  const args = [
-    "exec",
-    "--cd",
-    context.workspacePath,
-    "--skip-git-repo-check",
-    "--sandbox",
-    "danger-full-access",
-    "--output-last-message",
-    outputFile
-  ];
+  const args = context.resumeSessionId
+    ? [
+        "exec",
+        "resume",
+        "--skip-git-repo-check",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--json",
+        "--output-last-message",
+        outputFile
+      ]
+    : [
+        "exec",
+        "--cd",
+        context.workspacePath,
+        "--skip-git-repo-check",
+        "--sandbox",
+        "danger-full-access",
+        "--json",
+        "--output-last-message",
+        outputFile
+      ];
   if (context.model) {
     args.push("--model", context.model);
   }
   for (const imagePath of context.imagePaths) {
     args.push("--image", imagePath);
+  }
+  if (context.resumeSessionId) {
+    args.push(context.resumeSessionId);
   }
   args.push(context.prompt);
 
@@ -123,7 +164,11 @@ async function runCodexExec(context: {
 
   const finalMessage = await fs.readFile(outputFile, "utf8").catch(() => stdout);
   await fs.rm(outputFile, { force: true });
-  return finalMessage.trim() || stdout.trim() || "Codex run completed.";
+  return {
+    finalMessage: finalMessage.trim() || stdout.trim() || "Codex run completed.",
+    sessionId: parseCodexSessionId(stdout) ?? context.resumeSessionId ?? null,
+    resumed: Boolean(context.resumeSessionId)
+  };
 }
 
 async function completeRun(run: { id: string; thread_id: string }) {
@@ -134,6 +179,8 @@ async function completeRun(run: { id: string; thread_id: string }) {
 
   let assistantMessage = "";
   let selectedAccount: { id: string; label: string } | undefined;
+  let selectedSessionId: string | null = null;
+  let usedResume = false;
   const failures: string[] = [];
   const progressMessageId = `msg_${id()}`;
   let progressContent = "Codex Runner 已启动...\n";
@@ -159,17 +206,27 @@ async function completeRun(run: { id: string; thread_id: string }) {
     try {
       progressContent += `\n尝试账号：${account.label}\n`;
       await flushProgress(true);
-      assistantMessage = await runCodexExec({
+      const resumeSessionId =
+        context.thread.codex_session_account_id === account.id ? context.thread.codex_session_id : null;
+      const result = await runCodexExec({
         workspacePath: context.thread.workspace_path,
         accountId: account.id,
-        prompt: context.prompt || "请根据附件继续处理。",
+        prompt: buildPromptForAccount({
+          prompt: context.prompt,
+          seedMessages: context.seedMessages,
+          useResume: Boolean(resumeSessionId)
+        }),
         model: context.thread.model,
         imagePaths: context.attachments.map((attachment) => attachment.path),
+        resumeSessionId,
         onProgress: (chunk) => {
           progressContent += chunk;
           void flushProgress();
         }
       });
+      assistantMessage = result.finalMessage;
+      selectedSessionId = result.sessionId;
+      usedResume = result.resumed;
       selectedAccount = account;
       break;
     } catch (error) {
@@ -221,7 +278,12 @@ async function completeRun(run: { id: string; thread_id: string }) {
         `msg_${id()}`,
         run.thread_id,
         assistantMessage,
-        { runner: "codex-cli", accountId: selectedAccount.id }
+        {
+          runner: "codex-cli",
+          accountId: selectedAccount.id,
+          codexSessionId: selectedSessionId,
+          resumed: usedResume
+        }
       ]
     );
     await client.query(`update codex_accounts set last_used_at = now() where id = $1`, [
@@ -232,8 +294,13 @@ async function completeRun(run: { id: string; thread_id: string }) {
       [run.id]
     );
     await client.query(
-      `update threads set status = 'idle', updated_at = now() where id = $1`,
-      [run.thread_id]
+      `update threads
+       set status = 'idle',
+           codex_session_id = coalesce($2, codex_session_id),
+           codex_session_account_id = coalesce($3, codex_session_account_id),
+           updated_at = now()
+       where id = $1`,
+      [run.thread_id, selectedSessionId, selectedAccount.id]
     );
     await client.query("commit");
   } catch (error) {
@@ -255,6 +322,52 @@ function getMessageAttachments(metadata: unknown) {
       return typeof item.path === "string" ? { path: item.path } : null;
     })
     .filter((attachment): attachment is { path: string } => attachment !== null);
+}
+
+function buildPromptForAccount(context: {
+  prompt?: string;
+  seedMessages: { role: string; content: string }[];
+  useResume: boolean;
+}) {
+  const prompt = context.prompt?.trim() || "请根据附件继续处理。";
+  if (context.useResume) return prompt;
+
+  const priorMessages = context.seedMessages
+    .slice(0, -1)
+    .map((message) => ({
+      role: message.role === "assistant" ? "assistant" : "user",
+      content: message.content.trim().slice(0, 2000)
+    }))
+    .filter((message) => message.content.length > 0);
+
+  if (priorMessages.length === 0) return prompt;
+
+  const seed = priorMessages
+    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+    .join("\n\n")
+    .slice(-12000);
+
+  return [
+    "这是从另一个 Codex 账号切换过来的同一 Web 线程。下面是极简上下文种子，仅用于恢复必要上下文；请主要回答最后一条 USER 消息。",
+    "",
+    seed,
+    "",
+    `USER: ${prompt}`
+  ].join("\n");
+}
+
+function parseCodexSessionId(stdout: string) {
+  for (const line of stdout.split(/\r?\n/)) {
+    try {
+      const event = JSON.parse(line) as { type?: string; thread_id?: unknown };
+      if (event.type === "thread.started" && typeof event.thread_id === "string") {
+        return event.thread_id;
+      }
+    } catch {
+      // Ignore plain progress lines.
+    }
+  }
+  return null;
 }
 
 async function ensureAccountHome(accountHome: string) {

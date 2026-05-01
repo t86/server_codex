@@ -15,6 +15,8 @@ export type ThreadRow = {
   account_mode: string;
   pinned_account_id: string | null;
   model: string;
+  codex_session_id: string | null;
+  codex_session_account_id: string | null;
   status: string;
   created_at: string;
   updated_at: string;
